@@ -1,13 +1,5 @@
 #include <stdio.h>
 
-#define ROW_SIZE 50
-#define COL_SIZE 50
-#define COMMANDS_ROW_SIZE 50
-#define COMMANDS_COL_SIZE 2
-#define INCREASE 1
-#define DECREASE -(1)
-#define NONE 0
-
 // commands
 #define PEN_UP 1
 #define PEN_DOWN 2
@@ -17,14 +9,42 @@
 #define PRINT_FLOOR 6
 #define END 9
 
+#define ROW_SIZE 50
+#define COL_SIZE 50
+#define COMMANDS_ROW_SIZE 50
+#define COMMANDS_COL_SIZE 2
+#define INCREASE 1
+#define DECREASE -(1)
+#define NONE 0
+#define IS_MOVING_RIGHT(increment) (increment.xInc == INCREASE && increment.yInc == NONE)
+#define IS_MOVING_LEFT(increment) (increment.xInc == DECREASE && increment.yInc == NONE)
+#define IS_MOVING_UP(increment) (increment.xInc == NONE && increment.yInc == DECREASE)
+#define IS_MOVING_DOWN(increment) (increment.xInc == NONE && increment.yInc == INCREASE)
+#define WRITE_SYMBOL 0x2A // ASCII hex for '*' (asterisk)
+#define EMPTY_SYMBOL 0x20 // ASCII hex for ' ' (SPACE)
+
+typedef struct Point
+{
+    int x;
+    int y;
+} Point;
+
+typedef struct Increment
+{
+    int xInc;
+    int yInc;
+} Increment;
+
 void initializeFloor(char floor[][COL_SIZE]);
 void getCommands(int commands[][COMMANDS_COL_SIZE]);
 void printFloor(char floor[][COL_SIZE]);
 void start(char floor[][COL_SIZE], int commands[][COMMANDS_COL_SIZE]);
-void turnUp(int *xIncrement, int *yIncrement);
-void turnDown(int *xIncrement, int *yIncrement);
-void turnLeft(int *xIncrement, int *yIncrement);
-void turnRight(int *xIncrement, int *yIncrement);
+void turnUp(Increment *increment);
+void turnDown(Increment *increment);
+void turnLeft(Increment *increment);
+void turnRight(Increment *increment);
+void updateFloor(int penState, char floor[][COL_SIZE], Point *currentPos);
+void movePosition(char floor[][COL_SIZE], int totalSteps, Point *currentPos, Increment *increment);
 
 int main(void)
 {
@@ -42,7 +62,7 @@ void initializeFloor(char floor[][COL_SIZE])
     {
         for (size_t col = 0; col < COL_SIZE; col++)
         {
-            floor[row][col] = ' ';
+            floor[row][col] = EMPTY_SYMBOL;
         }
     }
 }
@@ -71,17 +91,16 @@ void getCommands(int commands[][COMMANDS_COL_SIZE])
 
 void start(char floor[][COL_SIZE], int commands[][COMMANDS_COL_SIZE])
 {
+    Increment increment = {INCREASE, NONE}; // move right by default
+    Point currentPos = {0, 0};
     size_t row = 0;
-    int currentCommand[COMMANDS_COL_SIZE] = {commands[row][0], commands[row][1]};
-    int xPos = 0;
-    int yPos = 0;
+    int currentCommand = commands[row][0];
+    int totalSteps;
     int penState = PEN_UP;
-    int xIncrement = INCREASE;
-    int yIncrement = NONE;
 
-    while (row < COMMANDS_ROW_SIZE && currentCommand[0] != END)
+    while (row < COMMANDS_ROW_SIZE && currentCommand != END)
     {
-        switch (currentCommand[0])
+        switch (currentCommand)
         {
         case PEN_DOWN:
             penState = PEN_DOWN;
@@ -90,51 +109,52 @@ void start(char floor[][COL_SIZE], int commands[][COMMANDS_COL_SIZE])
             penState = PEN_UP;
             break;
         case MOVE_FORWARD:
-            for (size_t step = 1; step <= currentCommand[1]; step++)
-            {
-                if (penState == PEN_DOWN)
-                {
-                    floor[yPos][xPos] = '*';
-                }
+            totalSteps = commands[row][1];
 
-                xPos += xIncrement;
-                yPos += yIncrement;
-            }
-            break;
-        case TURN_LEFT:
-            if (xIncrement == INCREASE && yPos > 0) // currently moving right -> turn up
+            for (size_t step = 1; step <= totalSteps; step++)
             {
-                turnUp(&xIncrement, &yIncrement);
-            }
-            else if (xIncrement == DECREASE && yPos < (ROW_SIZE - 1)) // currently moving left -> turn down
-            {
-                turnDown(&xIncrement, &yIncrement);
-            }
-            else if (yIncrement == INCREASE && xPos < (COL_SIZE - 1)) // currenty moving down -> turn right
-            {
-                turnRight(&xIncrement, &yIncrement);
-            }
-            else if (yIncrement == DECREASE && xPos > 0) // currently moving up -> turn left
-            {
-                turnLeft(&xIncrement, &yIncrement);
+                updateFloor(penState, floor, &currentPos);
+
+                if (step < totalSteps)
+                {
+                    movePosition(floor, totalSteps, &currentPos, &increment);
+                }
             }
             break;
         case TURN_RIGHT:
-            if (xIncrement == INCREASE && yPos < (ROW_SIZE - 1)) // currently moving right -> turn down
+            if (IS_MOVING_RIGHT(increment)) // currently moving right -> turn down
             {
-                turnDown(&xIncrement, &yIncrement);
+                turnDown(&increment);
             }
-            else if (xIncrement == DECREASE && yPos > 0) // currently moving left -> turn up
+            else if (IS_MOVING_LEFT(increment)) // currently moving left -> turn up
             {
-                turnUp(&xIncrement, &yIncrement);
+                turnUp(&increment);
             }
-            else if (yIncrement == INCREASE && xPos > 0) // currently moving down -> turn left
+            else if (IS_MOVING_DOWN(increment)) // currently moving down -> turn left
             {
-                turnLeft(&xIncrement, &yIncrement);
+                turnLeft(&increment);
             }
-            else if (yIncrement == DECREASE && xPos < (COL_SIZE - 1)) // currently moving up -> turn right
+            else if (IS_MOVING_UP(increment)) // currently moving up -> turn right
             {
-                turnRight(&xIncrement, &yIncrement);
+                turnRight(&increment);
+            }
+            break;
+        case TURN_LEFT:
+            if (IS_MOVING_RIGHT(increment)) // currently moving right -> turn up
+            {
+                turnUp(&increment);
+            }
+            else if (IS_MOVING_LEFT(increment)) // currently moving left -> turn down
+            {
+                turnDown(&increment);
+            }
+            else if (IS_MOVING_DOWN(increment)) // currenty moving down -> turn right
+            {
+                turnRight(&increment);
+            }
+            else if (IS_MOVING_UP(increment)) // currently moving up -> turn left
+            {
+                turnLeft(&increment);
             }
             break;
         case PRINT_FLOOR:
@@ -143,38 +163,62 @@ void start(char floor[][COL_SIZE], int commands[][COMMANDS_COL_SIZE])
         }
 
         row++;
-        currentCommand[0] = commands[row][0];
-        currentCommand[1] = commands[row][1];
+        currentCommand = commands[row][0];
     }
 }
 
-void turnUp(int *xIncrement, int *yIncrement)
+void updateFloor(int penState, char floor[][COL_SIZE], Point *currentPos)
 {
-    *xIncrement = NONE;
-    *yIncrement = DECREASE;
+    if (penState == PEN_DOWN)
+    {
+        floor[currentPos->y][currentPos->x] = WRITE_SYMBOL;
+    }
 }
 
-void turnDown(int *xIncrement, int *yIncrement)
+void movePosition(char floor[][COL_SIZE], int totalSteps, Point *currentPos, Increment *increment)
 {
-    *xIncrement = NONE;
-    *yIncrement = INCREASE;
+    int nextX = currentPos->x + increment->xInc;
+    int nextY = currentPos->y + increment->yInc;
+
+    if (nextX >= 0 && nextX <= (COL_SIZE - 1))
+    {
+        currentPos->x = nextX;
+    }
+
+    if (nextY >= 0 && nextY <= (ROW_SIZE - 1))
+    {
+        currentPos->y = nextY;
+    }
 }
 
-void turnRight(int *xIncrement, int *yIncrement)
+void turnUp(Increment *increment)
 {
-    *xIncrement = INCREASE;
-    *yIncrement = NONE;
+    increment->xInc = NONE;
+    increment->yInc = DECREASE;
 }
 
-void turnLeft(int *xIncrement, int *yIncrement)
+void turnDown(Increment *increment)
 {
-    *xIncrement = DECREASE;
-    *yIncrement = NONE;
+    increment->xInc = NONE;
+    increment->yInc = INCREASE;
+}
+
+void turnRight(Increment *increment)
+{
+    increment->xInc = INCREASE;
+    increment->yInc = NONE;
+}
+
+void turnLeft(Increment *increment)
+{
+    increment->xInc = DECREASE;
+    increment->yInc = NONE;
 }
 
 void printFloor(char floor[][COL_SIZE])
 {
     puts("");
+
     for (size_t row = 0; row < ROW_SIZE; row++)
     {
         for (size_t col = 0; col < COL_SIZE; col++)
